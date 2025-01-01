@@ -80,7 +80,7 @@ func importFromJSON(filePath string) error {
     }
     defer file.Close()
 
-    var tasks []models.Task // Use models.Task
+    var tasks []models.Task
     decoder := json.NewDecoder(file)
     err = decoder.Decode(&tasks)
     if err != nil {
@@ -89,7 +89,19 @@ func importFromJSON(filePath string) error {
 
     db := database.GetDB()
     for _, task := range tasks {
-        _, err := db.Exec(`INSERT INTO tasks (id, title, description, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+        // Check if task with the same ID already exists
+        var exists bool
+        err := db.QueryRow(`SELECT EXISTS(SELECT 1 FROM tasks WHERE id = ?)`, task.ID).Scan(&exists)
+        if err != nil {
+            return fmt.Errorf("error checking if task exists: %v", err)
+        }
+
+        if exists {
+            fmt.Printf("Task with ID %d already exists, skipping import...\n", task.ID)
+            continue // Skip this task if it already exists
+        }
+
+        _, err = db.Exec(`INSERT INTO tasks (id, title, description, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
             task.ID, task.Title, task.Description, task.Status, task.CreatedAt, task.UpdatedAt)
         if err != nil {
             return fmt.Errorf("error inserting task into database: %v", err)
@@ -123,7 +135,19 @@ func importFromCSV(filePath string) error {
         createdAt, _ := time.Parse(time.RFC3339, record[4])
         updatedAt, _ := time.Parse(time.RFC3339, record[5])
 
-        _, err := db.Exec(`INSERT INTO tasks (id, title, description, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+        // Check if task with the same ID already exists
+        var exists bool
+        err := db.QueryRow(`SELECT EXISTS(SELECT 1 FROM tasks WHERE id = ?)`, utils.MustAtoi(record[0])).Scan(&exists)
+        if err != nil {
+            return fmt.Errorf("error checking if task exists: %v", err)
+        }
+
+        if exists {
+            fmt.Printf("Task with ID %d already exists, skipping import...\n", utils.MustAtoi(record[0]))
+            continue // Skip this task if it already exists
+        }
+
+        _, err = db.Exec(`INSERT INTO tasks (id, title, description, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
             utils.MustAtoi(record[0]), record[1], record[2], record[3], createdAt, updatedAt)
         if err != nil {
             return fmt.Errorf("error inserting task into database: %v", err)
